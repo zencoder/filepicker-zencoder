@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-US" lang="en-US">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <title>Zencoder Dropzone</title>
+    <!-- jQuery Include -->
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <!-- Filepicker.io Include -->
+    <script type="text/javascript" src="//api.filepicker.io/v1/filepicker.js"></script>
+    <script type="text/javascript">  
+      $(function() {
+        filepicker.setKey('A9gfeq0CMTMeP1dR86vcxz');
+        var zenKey = 'c3b3bd3daa0d33ecc184e751f055db64';
+        $('a').click(function(e) {
+          e.preventDefault(); // This keeps the normal link behavior from happening
+          var acceptedExtensions = ['3g2','3gp','3gp2','3gpp','3gpp2','aac','ac3','eac3','ec3','f4a','f4b','f4v','flv','highwinds','m4a','m4b','m4r','m4v','mkv','mov','mp3','mp4','oga','ogg','ogv','ogx','ts','webm','wma','wmv'];
+          filepicker.pickAndStore({extensions: acceptedExtensions},{},function(fpfiles){
+            // This is the simplest Zencoder API call you can make. This will output an h.264 mp4 with AAC audio and
+            // save it to Zencoder's temporary storage on S3.
+            var request = {
+              input: fpfiles[0].url
+            }
+            // Let's use $.ajax instead of $.post so we can specify custom headers.
+            $.ajax({
+                url: 'https://app.zencoder.com/api/v2/jobs',
+                type: 'POST',
+                data: JSON.stringify(request),
+                headers: { "Zencoder-Api-Key": zenKey },
+                dataType: 'json',
+                success: function(data) {
+                  $('body').append('Job created! <a href="https://app.zencoder.com/jobs/'+ data.id +'">View Job</a>')
+                },
+                error: function(data) {
+                    console.log(data);
+                }
+            });
+          });
+        });
+      });
+    </script>
+</head>
+<body>
+  <div id="content">
+    <h1><a href="#" id="upload_link">Upload all the things!</a></h1>
+  </div>
+</body>
+</html>

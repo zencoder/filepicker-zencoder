@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-US" lang="en-US">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <title>Zencoder Dropzone</title>
+
+    <!-- jQuery Include -->
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+
+    <!-- Filepicker.io Include -->
+    <script type="text/javascript" src="//api.filepicker.io/v1/filepicker.js"></script>
+
+    <style type='text/css'>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: #1F333E;
+            color: #fff;
+            height: 100%;
+            font-family: 'HelveticaNeue-UltraLight','Helvetica Neue UltraLight','Helvetica Neue','Open-Light',sans-serif;
+        }
+        #content {
+            height: 100%;
+            width: 100%;
+        }
+        /* Basic styles */
+        .hidden { display: none }
+        h1 { font-weight: 300 }
+        /* We need this structure for completely centered text */
+        .container {
+            height: 100%;
+            width: 100%;
+            display: table;
+        }
+        .text {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
+        }
+        /* Setting height/width to 100% will cause scrollbars, so absolutely position to the edges */
+        .full {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 75px;
+        }
+        /* Setup */
+        #setup {
+            /* Nothing special here yet */
+        }
+        #setup input {
+            width: 80%;
+            height: 50px;
+            text-align: center;
+            font-size: 40px;
+            color: #1E323D;
+            background-color: #609FC1;
+            border: 3px solid #fff;
+        }
+        #setup input:focus { outline: none; }
+        /* Styling placeholder text still takes vendor prefixes :( */
+        ::-webkit-input-placeholder {
+           color: #47758F;
+        }
+        :-moz-placeholder { /* Firefox 18- */
+           color: #47758F;  
+        }
+        ::-moz-placeholder {  /* Firefox 19+ */
+           color: #47758F;  
+        }
+        :-ms-input-placeholder {  
+           color: #47758F;  
+        }
+        /* Drop Zone */
+        #dropZone {
+            /* Nothing special here yet */
+        }
+        .normal {
+            border: 3px dashed #fff;
+            background-color: #47758F;
+        }
+        .over {
+            border: 3px solid #fff;
+            background-color: #609FC1;
+        }
+        /* History Bar */
+        #historyBar {
+            position: absolute;
+            bottom: 0px;
+            left: 0;
+            right: 0;
+            height: 75px;
+            background-color: #1E323D;
+            overflow-x: scroll;
+        }
+        #navigation {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            height: 75px;
+            width: 25px;
+            background-color: #609FC1;
+        }
+        .navigationBtns {
+            width: 25px;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            z-index: 2;
+        }
+        .navigationBtns img { margin-top: 5px;}
+        .navigationContent {
+            display: none;
+            z-index: 1;
+        }
+        .navigationContent a { color: #fff; }
+        .navigationContent a:visited { color: #fff; }
+        /* Video List */
+        #videoList {
+            text-align: left;
+            width: 100%;
+            white-space: nowrap
+        }
+        #videoList a {
+            padding-left: 10px;
+            display: inline-block;
+        }
+        #videoList img {
+            height: 50px;
+            width: auto;
+        }
+        #videoList a:last-child { padding-right: 35px; }
+        #videoList h3 { margin-left: 20px;}
+    </style>
+
+    <script type="text/javascript">
+        var Zencoder = {};
+        Zencoder.base_url = "https://app.zencoder.com/api/v2/";
+        Zencoder.base_job_url = function(id) {
+            var url = 'https://app.zencoder.com/jobs/' + id;
+            return url;
+        }
+        // Pull some stuff out of localStorage if available
+        Zencoder.jobs = localStorage.jobs ? JSON.parse(localStorage.jobs) : null;
+        Zencoder.request_templates = localStorage.request_templates ? JSON.parse(localStorage.request_templates) : null;
+        $(function(){
+
+            // Check for an API key in localStorage first.
+            Zencoder.api_key = localStorage.getItem('zencoder-api-key');
+            if (Zencoder.api_key == null) {
+                $('#api-key-form').submit(function(e){
+                    e.preventDefault();
+                    Zencoder.api_key = $('#api-key').val();
+                    localStorage.setItem('zencoder-api-key', Zencoder.api_key);
+                    // Once the API key is set, show the drop zone
+                    $('#setup').fadeOut(function(){
+                        $('#dropZone, #historyBar, #navigation').fadeIn();
+                        listJobs(Zencoder.jobs);
+                    });
+                });
+            } else {
+                $('#setup').hide();
+                $('#dropZone, #historyBar, #navigation').fadeIn();
+                listJobs(Zencoder.jobs);
+            }
+
+            // Set your Filepicker.io API key
+            filepicker.setKey('AACRnG3VDSwyJfHqeN06ez');
+
+            // We'll be referencing these elements a few times,
+            // so we might as well put them in vars.
+            var $dz = $('#dropZone');
+            var $dzResult = $('#localDropResult');
+
+            // Set up our Filepicker.io Drop Pane.
+            filepicker.makeDropPane($dz, {
+                multiple: false,
+                dragEnter: function() {
+                    $dz.find('h1').text('Drop to upload');
+                    $dz.removeClass('normal').addClass('over');
+                },
+                dragLeave: function() {
+                    $dz.find('h1').text('Drop files here');
+                    $dz.removeClass('over').addClass('normal');
+                },
+                onSuccess: function(fpfiles) {
+                    $dz.find('h1').text('File uploaded. Encoding...');
+                    createJob(fpfiles[0], $dz);
+                },
+                onError: function(type, message) {
+                    $dzResult.text('('+type+') '+ message);
+                },
+                onProgress: function(percentage) {
+                    $dz.find('h1').text('Uploading ('+percentage+'%)');
+                }
+            });
+
+            // Settings stuff
+
+            $('#settingsBtn').click(function(e) {
+                var toggleSettings = $('#navigation').width() == 200 ? '25px' : '200px';
+                $('#navigation').animate(
+                    { width: toggleSettings }, 
+                    function() {
+                        $('.navigationContent').toggle();
+                    }
+                );
+            });
+
+            $('#clearData').click(function(e) {
+                localStorage.clear();
+                document.location.reload();
+            });
+        });
+
+        // Send the create request to Zencoder
+        function createJob(file, $element) {
+            var request = {
+                input: file.url,
+                outputs: [{
+                    thumbnails: {
+                      number: 1,
+                      public: true
+                    }
+                }]
+            };
+
+            // Let's use $.ajax instead of $.post so we can specify custom headers.
+            $.ajax({
+                url: Zencoder.base_url + 'jobs',
+                type: 'POST',
+                data: JSON.stringify(request),
+                headers: { "Zencoder-Api-Key": Zencoder.api_key },
+                dataType: 'json',
+                success: function(data) {
+                    console.log(data);
+                    // Once the file is uploaded, start polling Zencoder for progress
+                    pollZencoder(data.id, $element);
+                },
+                error: function(data) {
+                    console.log(data);
+                }
+            });
+        }
+
+        // Poll the Zencoder API for progress
+        function pollZencoder(jobId, $element) {
+            $.ajax({
+                url: Zencoder.base_url + 'jobs/' + jobId + '/progress' ,
+                type: 'GET',
+                headers: { "Zencoder-Api-Key": Zencoder.api_key },
+                //dataType: 'json',
+                success: function(data) {
+                    if (data.state != 'finished') {
+                        console.log(data);
+
+                        // We don't want to update progress while the job is still queued
+                        if (data.state != 'waiting') {
+                            $element.find('h1').text('Encoding ('+ data.progress +'%)');
+                        }
+                        // Since the job isn't finished, wait 3 seconds and poll again
+                        setTimeout(function() { pollZencoder(jobId, $element) }, 3000);
+                    } else {
+                        // Job is finished, so let the user know.
+                        $element.find('h1').html('Finished. <a href="https://app.zencoder.com/jobs/'+ jobId +'">View Job</a>');
+                        updateJobs();
+                    }
+                },
+                error: function(data) {
+                    console.log(data)
+                }
+            });
+        }
+
+        // Update the Jobs object
+        function updateJobs() {
+            $.ajax({
+                url: Zencoder.base_url + 'jobs/',
+                type: 'GET',
+                headers: { "Zencoder-Api-Key": Zencoder.api_key },
+                //1dataType: 'json',
+                success: function(data) {
+                    if (data && Zencoder.jobs && (Zencoder.jobs[0].job.id == data[0].job.id)) {
+                        console.log('Jobs are already up to date...')
+                    } else {
+                        if (!data) {
+                            console.log('User has no jobs...')
+                            $('#videoList').html('<h3>You have no jobs! Go ahead and upload one...</h3>')
+                        } else {
+                            Zencoder.jobs = data;
+                            localStorage.setItem('jobs', JSON.stringify(Zencoder.jobs));
+                            listJobs(Zencoder.jobs);
+                        }
+                    }
+                },
+                error: function(data) {
+                    console.log(data)
+                }
+            });
+        }
+        // List the last 50 jobs along the bottom
+        function listJobs(jobs) {
+            if (jobs) {
+                // There are jobs, so it's time to update them.
+                // Remove whatever's currently there
+                $('#videoList').empty();
+                $.each(jobs, function(index, value){
+                    if (value.job.thumbnails.length == 0) {
+                        // Job didn't have an image, so display a placeholder
+                        $('#videoList').append('<a href="'+ Zencoder.base_job_url(value.job.id) + '/"><img src="./images/place.jpg"/></a>');
+                    } else {
+                        // Job has a thumbnail, so display it.
+                        $('#videoList').append('<a href="'+ Zencoder.base_job_url(value.job.id) +'/"><img src="'+ value.job.thumbnails[0].url +'"/></a>');
+                    }
+                });
+                updateJobs();
+            } else {
+                // jobs is empty, so let's see if we can get an update from Zencoder
+                updateJobs();
+            }
+        }
+    </script>
+</head>
+
+
+<body>
+    <div id="content">
+
+        <!-- Get the user's API key before anything else -->
+        <div id="setup" class="full">
+            <div class="container">
+                <div class="text">
+                    <form id="api-key-form">
+                        <input type="text" id="api-key" placeholder="Zencoder API Key"><br />
+                        <p>Press enter when done.</p>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drop zone needs to be hidden by default. We'll unhide it when the API key is put in -->
+        <div id="dropZone" class="full normal hidden">
+            <div class="container">
+                <div class="text">
+                    <h1>Drop files here</h1>
+                </div>
+            </div>
+        </div>
+
+        <div id="historyBar" class="carousel hidden">
+            <div class="container">
+                <div class="text" id="videoList">
+                    <h3 id="no-jobs">Loading recent jobs...</h3>
+                </div>
+            </div>
+        </div>
+
+        <div id="navigation" class="hidden">
+            <div class="container">
+                <div class="text navigationBtns">
+                    <p>
+                        <a href="http://app.zencoder.com/"><img src="./images/outgoing.png"/></a>
+                        <a href="#" id="settingsBtn"><img src="./images/settings.png"/></a>
+                    </p>
+                </div>
+                <div class="text navigationContent">
+                    <p>
+                        <a href="#" id="clearData">Clear All Data</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
