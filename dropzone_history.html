@@ -327,18 +327,20 @@
 
         // Update the Jobs object
         function updateJobs() {
+            console.log('Checking for new jobs...');
             $.ajax({
                 url: Zencoder.base_url + 'jobs/',
                 type: 'GET',
                 headers: { "Zencoder-Api-Key": Zencoder.api_key },
                 success: function(data) {
-                    // We'll be comparing values from Zencoder.jobs and data.job, so make sure exist first.
+                    // We'll be comparing values from Zencoder.jobs and data.job, so make sure exist first (and have things in them).
                     // If they do, see if the newest local job is the same as the newest retrieved job.
-                    if (data && Zencoder.jobs && (Zencoder.jobs[0].job.id == data[0].job.id)) {
+                    if (data && Zencoder.jobs && (data.length > 0) && (Zencoder.jobs.length > 0) && (Zencoder.jobs[0].job.id == data[0].job.id)) {
                         console.log('Jobs are already up to date...')
                     } else {
-                        if (!data) { // No jobs were returned
-                            $('#videoList').html('<h3>You have no jobs! Go ahead and upload one...</h3>')
+                        // There are either no jobs or new jobs
+                        if (data.length == 0) { // No jobs were returned
+                            $('#videoList').html('<h3>You have no jobs! Go ahead and upload one...</h3>');
                         } else { // New jobs were found, so replace local information with the stuff we just received
                             Zencoder.jobs = data;
                             localStorage.setItem('jobs', JSON.stringify(Zencoder.jobs));
@@ -367,7 +369,7 @@
                 // updateJobs() is never called directly, so we could have just displayed out of date local info.
                 updateJobs();
             } else {
-                // jobs is empty, so let's see if we can get an update from Zencoder
+                // No jobs, so make sure there isn't anything new with Zencoder
                 updateJobs();
             }
         }
