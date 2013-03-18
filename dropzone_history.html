@@ -132,6 +132,39 @@
         }
         #videoList a:last-child { padding-right: 35px; }
         #videoList h3 { margin-left: 20px;}
+
+        /* Request Editor */
+        .dialog {
+            position: absolute;
+            left: 50%;
+            top: 50px;
+            border: 1px solid #eee;
+            background: #fff;
+            z-index: 1000;
+            color: #000;
+        }
+        .dialog .content {
+            padding: 15px 20px;
+        }
+        .dialog h3 {
+            padding: 0;
+            margin: 0;
+        }
+        .dialog p {
+            margin: 0;
+            padding: 0;
+            font-size: .9em;
+        }
+
+        #requestEditor {
+            width: 400px;
+            margin-left: -200px;
+        }
+        #requestEditor textarea {
+            width: 394px;
+            height: 400px;
+        }
+
     </style>
 
     <script type="text/javascript">
@@ -143,7 +176,34 @@
         }
         // Pull some stuff out of localStorage if available
         Zencoder.jobs = localStorage.jobs ? JSON.parse(localStorage.jobs) : null;
-        Zencoder.request_templates = localStorage.request_templates ? JSON.parse(localStorage.request_templates) : null;
+        /* Set up the default template if there isn't one in localStorage */
+        if (localStorage.request_template) {
+            Zencoder.request_template = JSON.parse(localStorage.request_template);
+        } else {
+            /* Default request template. Keep it simple, but with a thumb for the history bar. */
+            var request = {
+                input: '',
+            }
+            localStorage.request_template = JSON.stringify(request)
+            Zencoder.request_template = request;
+        }
+        // Now it's time to build a request off of the template
+        // We want to add at least one thumbnail if none are in the request already
+        Zencoder.request = function(file) {
+            Zencoder.request_template.input = file.url
+
+            if (!Zencoder.request_template.outputs || !Zencoder.request_template.outputs[0].thumbnails) {
+                // If there is no outputs array, create one first (with a hash inside), then add thumbnails.
+                if (!Zencoder.request_template.outputs) { Zencoder.request_template.outputs = [{}] }
+                Zencoder.request_template.outputs[0].thumbnails = {
+                    base_url: 's3://zencodertesting/',
+                    number: 1,
+                    public: true
+                }
+            }
+            return Zencoder.request_template;
+        }
+        
         $(function(){
 
             // Check for an API key in localStorage first.
@@ -196,8 +256,7 @@
                 }
             });
 
-            // Settings stuff
-
+            // Pull out the settings board
             $('#settingsBtn').click(function(e) {
                 var toggleSettings = $('#navigation').width() == 200 ? '25px' : '200px';
                 $('#navigation').animate(
@@ -208,29 +267,22 @@
                 );
             });
 
+            /* Clear all the data and refresh the page */
             $('#clearData').click(function(e) {
                 localStorage.clear();
                 document.location.reload();
             });
+
+            /* Request Editor Modal */
         });
 
         // Send the create request to Zencoder
         function createJob(file, $element) {
-            var request = {
-                input: file.url,
-                outputs: [{
-                    thumbnails: {
-                      number: 1,
-                      public: true
-                    }
-                }]
-            };
-
             // Let's use $.ajax instead of $.post so we can specify custom headers.
             $.ajax({
                 url: Zencoder.base_url + 'jobs',
                 type: 'POST',
-                data: JSON.stringify(request),
+                data: JSON.stringify(Zencoder.request(file)),
                 headers: { "Zencoder-Api-Key": Zencoder.api_key },
                 dataType: 'json',
                 success: function(data) {
@@ -257,7 +309,7 @@
 
                         // We don't want to update progress while the job is still queued
                         if (data.state != 'waiting') {
-                            $element.find('h1').text('Encoding ('+ data.progress +'%)');
+                            $element.find('h1').text('Encoding ('+ data.progress.toFixed(2) +'%)');
                         }
                         // Since the job isn't finished, wait 3 seconds and poll again
                         setTimeout(function() { pollZencoder(jobId, $element) }, 3000);
@@ -279,24 +331,22 @@
                 url: Zencoder.base_url + 'jobs/',
                 type: 'GET',
                 headers: { "Zencoder-Api-Key": Zencoder.api_key },
-                //1dataType: 'json',
                 success: function(data) {
+                    // We'll be comparing values from Zencoder.jobs and data.job, so make sure exist first.
+                    // If they do, see if the newest local job is the same as the newest retrieved job.
                     if (data && Zencoder.jobs && (Zencoder.jobs[0].job.id == data[0].job.id)) {
                         console.log('Jobs are already up to date...')
                     } else {
-                        if (!data) {
-                            console.log('User has no jobs...')
+                        if (!data) { // No jobs were returned
                             $('#videoList').html('<h3>You have no jobs! Go ahead and upload one...</h3>')
-                        } else {
+                        } else { // New jobs were found, so replace local information with the stuff we just received
                             Zencoder.jobs = data;
                             localStorage.setItem('jobs', JSON.stringify(Zencoder.jobs));
                             listJobs(Zencoder.jobs);
                         }
                     }
                 },
-                error: function(data) {
-                    console.log(data)
-                }
+                error: function(data) { console.log(data) }
             });
         }
         // List the last 50 jobs along the bottom
@@ -311,9 +361,10 @@
                         $('#videoList').append('<a href="'+ Zencoder.base_job_url(value.job.id) + '/"><img src="./images/place.jpg"/></a>');
                     } else {
                         // Job has a thumbnail, so display it.
-                        $('#videoList').append('<a href="'+ Zencoder.base_job_url(value.job.id) +'/"><img src="'+ value.job.thumbnails[0].url +'"/></a>');
+                        $('#videoList').append('<a href="'+ Zencoder.base_job_url(value.job.id) +'/"><img src="'+ value.job.thumbnails[0].url +'" onError="this.onerror=null;this.src=\'./images/place.jpg\';"/></a>');
                     }
                 });
+                // updateJobs() is never called directly, so we could have just displayed out of date local info.
                 updateJobs();
             } else {
                 // jobs is empty, so let's see if we can get an update from Zencoder
@@ -348,6 +399,7 @@
             </div>
         </div>
 
+        <!-- Show the last 50 jobs processed -->
         <div id="historyBar" class="carousel hidden">
             <div class="container">
                 <div class="text" id="videoList">
@@ -356,6 +408,7 @@
             </div>
         </div>
 
+        <!-- Navigation pop out -->
         <div id="navigation" class="hidden">
             <div class="container">
                 <div class="text navigationBtns">
@@ -370,6 +423,14 @@
                     </p>
                 </div>
             </div>
+        </div>
+
+        <!-- Request Editor Modal -->
+        <div id="requestEditor" class="dialog hidden">
+            <div class="header">
+                <h3>Modify Your Request</h3>
+            </div>
+            <textarea></textarea>
         </div>
     </div>
 </body>
