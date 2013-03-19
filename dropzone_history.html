@@ -59,6 +59,8 @@
             border: 3px solid #fff;
         }
         #setup input:focus { outline: none; }
+        #setup input.error { border-color: #EF0000;}
+        .error { color: #EF0000; }
         /* Styling placeholder text still takes vendor prefixes :( */
         ::-webkit-input-placeholder {
            color: #47758F;
@@ -269,6 +271,7 @@
 
             /* Clear all the data and refresh the page */
             $('#clearData').click(function(e) {
+                e.preventDefault();
                 localStorage.clear();
                 document.location.reload();
             });
@@ -348,7 +351,21 @@
                         }
                     }
                 },
-                error: function(data) { console.log(data) }
+                error: function(data) {
+                    var errorMsg;
+                    if (data.status == 401) {
+                        // API key was incorrect...
+                        errorMsg = 'Invalid Zencoder API Key';
+                    } else {
+                        errorMsg = "Something went wrong!"
+                    }
+                    localStorage.clear();
+                    $('#dropZone, #historyBar, #navigation').hide();
+                    // Let the user know what the error was
+                    $('#api-key').addClass('error');
+                    $('.alert').replaceWith('<p class="alert error">'+ errorMsg + '</p>');
+                    $('#setup').fadeIn();
+                }
             });
         }
         // List the last 50 jobs along the bottom
@@ -387,6 +404,7 @@
                     <form id="api-key-form">
                         <input type="text" id="api-key" placeholder="Zencoder API Key"><br />
                         <p>Press enter when done.</p>
+                        <p class='alert'></p>
                     </form>
                 </div>
             </div>
