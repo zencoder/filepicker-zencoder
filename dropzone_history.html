@@ -166,6 +166,9 @@
             width: 394px;
             height: 400px;
         }
+        #requestEditor .controls {
+            float: right;
+        }
 
     </style>
 
@@ -184,7 +187,7 @@
         } else {
             /* Default request template. Keep it simple, but with a thumb for the history bar. */
             var request = {
-                input: '',
+                input: 'Ignore -- This is filled in upon successful upload',
             }
             localStorage.request_template = JSON.stringify(request)
             Zencoder.request_template = request;
@@ -198,7 +201,6 @@
                 // If there is no outputs array, create one first (with a hash inside), then add thumbnails.
                 if (!Zencoder.request_template.outputs) { Zencoder.request_template.outputs = [{}] }
                 Zencoder.request_template.outputs[0].thumbnails = {
-                    base_url: 's3://zencodertesting/',
                     number: 1,
                     public: true
                 }
@@ -218,13 +220,13 @@
                     // Once the API key is set, show the drop zone
                     $('#setup').fadeOut(function(){
                         $('#dropZone, #historyBar, #navigation').fadeIn();
-                        listJobs(Zencoder.jobs);
+                        Zencoder.utils.listJobs(Zencoder.jobs);
                     });
                 });
             } else {
                 $('#setup').hide();
                 $('#dropZone, #historyBar, #navigation').fadeIn();
-                listJobs(Zencoder.jobs);
+                Zencoder.utils.listJobs(Zencoder.jobs);
             }
 
             // Set your Filepicker.io API key
@@ -248,7 +250,7 @@
                 },
                 onSuccess: function(fpfiles) {
                     $dz.find('h1').text('File uploaded. Encoding...');
-                    createJob(fpfiles[0], $dz);
+                    Zencoder.utils.createJob(fpfiles[0], $dz);
                 },
                 onError: function(type, message) {
                     $dzResult.text('('+type+') '+ message);
@@ -258,8 +260,10 @@
                 }
             });
 
+            // SETTINGS INTERFACE
             // Pull out the settings board
             $('#settingsBtn').click(function(e) {
+                e.preventDefault();
                 var toggleSettings = $('#navigation').width() == 200 ? '25px' : '200px';
                 $('#navigation').animate(
                     { width: toggleSettings }, 
@@ -277,10 +281,35 @@
             });
 
             /* Request Editor Modal */
+            $('#showRequestEditor').click(function(e){
+                e.preventDefault();
+                // Show the editor and populate it with what's in localStorage
+                $('#requestEditor').fadeIn(function(){
+                    $('#requestEditor textarea').val(JSON.stringify(Zencoder.request_template));
+                    $('#cancelEditRequest').click(function(e){
+                        e.preventDefault();
+                        $('#requestEditor').fadeOut();
+                    });
+                    $('#saveRequest').click(function(e){
+                        e.preventDefault();
+                        var newRequest = $('#requestEditor textarea').val();
+                        var updateResult = Zencoder.utils.updateRequestTemplate(newRequest);
+                        if (updateResult) {
+                            console.log('New template saved...');
+                            $('#requestEditor').fadeOut();
+                        } else {
+                            console.log('Something went wrong...')
+                        }
+                    })
+                });
+            })
         });
 
+        // It's just a demo, but let's put our functions in Zencoder.utils to be good JS citizens anyway.
+        Zencoder.utils = {};
+
         // Send the create request to Zencoder
-        function createJob(file, $element) {
+        Zencoder.utils.createJob = function(file, $element) {
             // Let's use $.ajax instead of $.post so we can specify custom headers.
             $.ajax({
                 url: Zencoder.base_url + 'jobs',
@@ -291,7 +320,7 @@
                 success: function(data) {
                     console.log(data);
                     // Once the file is uploaded, start polling Zencoder for progress
-                    pollZencoder(data.id, $element);
+                    Zencoder.utils.pollZencoder(data.id, $element);
                 },
                 error: function(data) {
                     console.log(data);
@@ -300,7 +329,7 @@
         }
 
         // Poll the Zencoder API for progress
-        function pollZencoder(jobId, $element) {
+        Zencoder.utils.pollZencoder = function(jobId, $element) {
             $.ajax({
                 url: Zencoder.base_url + 'jobs/' + jobId + '/progress' ,
                 type: 'GET',
@@ -315,11 +344,11 @@
                             $element.find('h1').text('Encoding ('+ data.progress.toFixed(2) +'%)');
                         }
                         // Since the job isn't finished, wait 3 seconds and poll again
-                        setTimeout(function() { pollZencoder(jobId, $element) }, 3000);
+                        setTimeout(function() { Zencoder.utils.pollZencoder(jobId, $element) }, 3000);
                     } else {
                         // Job is finished, so let the user know.
                         $element.find('h1').html('Finished. <a href="https://app.zencoder.com/jobs/'+ jobId +'">View Job</a>');
-                        updateJobs();
+                        Zencoder.utils.updateJobs();
                     }
                 },
                 error: function(data) {
@@ -329,7 +358,7 @@
         }
 
         // Update the Jobs object
-        function updateJobs() {
+        Zencoder.utils.updateJobs = function() {
             console.log('Checking for new jobs...');
             $.ajax({
                 url: Zencoder.base_url + 'jobs/',
@@ -347,7 +376,7 @@
                         } else { // New jobs were found, so replace local information with the stuff we just received
                             Zencoder.jobs = data;
                             localStorage.setItem('jobs', JSON.stringify(Zencoder.jobs));
-                            listJobs(Zencoder.jobs);
+                            Zencoder.utils.listJobs(Zencoder.jobs);
                         }
                     }
                 },
@@ -355,11 +384,11 @@
                     var errorMsg;
                     if (data.status == 401) {
                         // API key was incorrect...
+                        localStorage.clear();
                         errorMsg = 'Invalid Zencoder API Key';
                     } else {
                         errorMsg = "Something went wrong!"
                     }
-                    localStorage.clear();
                     $('#dropZone, #historyBar, #navigation').hide();
                     // Let the user know what the error was
                     $('#api-key').addClass('error');
@@ -369,7 +398,7 @@
             });
         }
         // List the last 50 jobs along the bottom
-        function listJobs(jobs) {
+        Zencoder.utils.listJobs = function(jobs) {
             if (jobs) {
                 // There are jobs, so it's time to update them.
                 // Remove whatever's currently there
@@ -384,10 +413,27 @@
                     }
                 });
                 // updateJobs() is never called directly, so we could have just displayed out of date local info.
-                updateJobs();
+                this.updateJobs();
             } else {
                 // No jobs, so make sure there isn't anything new with Zencoder
-                updateJobs();
+                this.updateJobs();
+            }
+        }
+
+        // Mechanism to update the request template
+        Zencoder.utils.updateRequestTemplate = function(request) {
+            if (request) {
+                try {
+                    // Make sure the new template is valid JSON
+                    var newRequest = JSON.parse(request);
+                } catch(e) {
+                    console.log(e);
+                    return false;
+                }
+                // We know we've got a valid template, so update Zencoder.request_template and localStorage.requestTemplate
+                localStorage.request_template = JSON.stringify(newRequest);
+                Zencoder.request_template = newRequest
+                return true;
             }
         }
     </script>
@@ -439,6 +485,7 @@
                 </div>
                 <div class="text navigationContent">
                     <p>
+                        <a href="#" id="showRequestEditor">Edit Request</a><br/>
                         <a href="#" id="clearData">Clear All Data</a>
                     </p>
                 </div>
@@ -450,7 +497,12 @@
             <div class="header">
                 <h3>Modify Your Request</h3>
             </div>
-            <textarea></textarea>
+            <form>
+                <textarea></textarea>
+                <span class="controls">
+                <a href="#" id="cancelEditRequest">Cancel</a>
+                <a href="#" id="saveRequest">Update Request</a>
+            </form>
         </div>
     </div>
 </body>
