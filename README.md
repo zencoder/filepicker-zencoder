@@ -4,5 +4,5 @@ Sample integration between [Filepicker.io](http://www.filepicker.io) and [Zencod
 
 ## Setup
 
-  $ npm install
-  $ node app.js
+    $ npm install
+    $ node app.js
