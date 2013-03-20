@@ -1,0 +1,13 @@
+{
+  "name": "Filepicker-Zencoder",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "connect": "*"
+  },
+  "engines": {
+    "node": "0.8.x"
+  }
+}
