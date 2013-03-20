@@ -76,7 +76,7 @@
         }
         /* Drop Zone */
         #dropZone {
-            /* Nothing special here yet */
+            cursor: pointer;
         }
         .normal {
             border: 3px dashed #fff;
@@ -237,9 +237,13 @@
             var $dz = $('#dropZone');
             var $dzResult = $('#localDropResult');
 
+            var acceptedExtensions = ['3g2','3gp','3gp2','3gpp','3gpp2','aac','ac3','eac3','ec3','f4a','f4b','f4v','flv','highwinds','m4a','m4b','m4r','m4v','mkv','mov','mp3','mp4','oga','ogg','ogv','ogx','ts','webm','wma','wmv'];
+
             // Set up our Filepicker.io Drop Pane.
             filepicker.makeDropPane($dz, {
                 multiple: false,
+                extensions: acceptedExtensions,
+                location: 's3',
                 dragEnter: function() {
                     $dz.find('h1').text('Drop to upload');
                     $dz.removeClass('normal').addClass('over');
@@ -250,6 +254,7 @@
                 },
                 onSuccess: function(fpfiles) {
                     $dz.find('h1').text('File uploaded. Encoding...');
+                    $dz.find('p').text('');
                     Zencoder.utils.createJob(fpfiles[0], $dz);
                 },
                 onError: function(type, message) {
@@ -260,13 +265,22 @@
                 }
             });
 
+            // We've got a drop pane...but what if we also made the whole thing clickable for normal upload
+            $dz.click(function(e){
+                filepicker.pickAndStore({extensions:acceptedExtensions,openTo:'COMPUTER'},{location:"S3"}, function(fpfiles){
+                    $dz.find('h1').text('File uploaded. Encoding...');
+                    $dz.find('p').text('');
+                    Zencoder.utils.createJob(fpfiles[0], $dz);
+                });
+            });
+
             // SETTINGS INTERFACE
             // Pull out the settings board
             $('#settingsBtn').click(function(e) {
                 e.preventDefault();
                 var toggleSettings = $('#navigation').width() == 200 ? '25px' : '200px';
                 $('#navigation').animate(
-                    { width: toggleSettings }, 
+                    { width: toggleSettings },
                     function() {
                         $('.navigationContent').toggle();
                     }
@@ -348,6 +362,7 @@
                     } else {
                         // Job is finished, so let the user know.
                         $element.find('h1').html('Finished. <a href="https://app.zencoder.com/jobs/'+ jobId +'">View Job</a>');
+                        $element.find('p').text('You can drag another file or click to encode another at any time.')
                         Zencoder.utils.updateJobs();
                     }
                 },
@@ -461,6 +476,7 @@
             <div class="container">
                 <div class="text">
                     <h1>Drop files here</h1>
+                    <p>Or click to browse</p>
                 </div>
             </div>
         </div>
